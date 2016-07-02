@@ -1,0 +1,114 @@
+function Panorama(M)
+clc;
+close all;
+
+% Assume we load two images from which we want to construct the panoramic
+% image. Compute then the SIFT descriptors for each of both images
+% and compute the correspondences between both images. Let xa be the
+% matched SIFT keypoint coordinates of the first image, and xb the matched
+% SIFT keypoint coordinates of the second image.
+max_n=0;
+Ia = imread('images/roofs2.jpg');
+Ib = imread('images/roofs1.jpg');
+Ia = single(rgb2gray(Ia));
+Ib = single(rgb2gray(Ib));
+[fa,da] = vl_sift(Ia);
+[fb,db] = vl_sift(Ib);
+[matches, scores] = vl_ubcmatch(da,db);
+numMatches = size(matches,2);
+xa = fa(1:2,matches(1,:));
+xb = fb(1:2,matches(2,:));
+
+% Apply the RANSAC algorithm: loop for M times, where M is a user
+% specified parameter (e.g. M = 100), and perform the next task:
+
+for k=1:M
+% Select randomly some (in this example we select 10) of the previous
+% correspondences:
+
+subset = vl_colsubset(1:numMatches, 10);
+
+% Assume that the two images correspond to each other according to
+% a linear model (i.e. a translation):
+
+d = xb(1:2,subset) - xa(1:2,subset);
+p = mean(d,2);
+
+% Apply the previous obtained translation to all the correspondences
+% of the first image
+
+xb_ = zeros(size(xb));
+for i=1:numMatches,
+    xb_(:,i) = xa(:,i) + p;
+end
+
+%Check how many of these new points are near the original ones
+
+n = 0;
+for i=1:numMatches,
+    e = xb_(:,i) - xb(:,i);
+    if (norm(e) < 5), n = n + 1; end
+end
+
+%
+% Among all randomly selected displacements, select the one with largest
+% value of n. Use this displacement to create the panoramic image.
+if n>max_n
+    max_n=n;
+    best_p=p;
+end
+end
+
+% 3. Once the best displacement has been found, construct the associated
+% panoramic image by merging the two images. We discuss two possible
+% solutions:
+
+% (a) Note that the linear transformation gives us the transformation that
+% we have to apply to a point at image Ia to obtain the corresponding
+% point at (the coordinate system of) Ib. We may try to apply this
+% transformation to map each point of Ia to (the coordinate system
+% of) Ib. To construct the panoramic image we just need to paint all
+% pixels that do not have a color assigned. This procedure is not a
+% good idea, since an integer position of Ia will fall on a non-integer
+% position of Ib. How do we draw a pixel on a non-integer position ?
+% Do we just round to the nearest integer ? Just think a bit about it
+% and you’ll see that this is not a good way to proceed.
+
+% (b) The second solution, which is usually used, is to use the inverse transform
+% to compute the panoramic image. Assume we take the coordinate
+% system of Ib. For each integer pixel of Ib (for which we do
+% not know its color) we ask where from Ia it comes from. Again, the
+% resulting pixel at Ia may be a non-integer, but this problem is easy
+% to solve. Just use interpolation techniques.
+% The algorithm is as follows. First, we take the corners of Ia and
+% transform them to the coordinate system of Ib (which is our reference
+% image). This allows us to compute the bounding box for the
+% panoramic image
+
+box2 = [1 size(Ia,2) size(Ia,2) 1;
+    1 1 size(Ia,1) size(Ia,1)];
+box2_ = zeros(2,4);
+for i=1:4,
+    box2_(:,i) = box2(:,i) + best_p;
+end
+min_x = min(1,min(box2_(1,:)));
+min_y = min(1,min(box2_(2,:)));
+max_x = max(size(Ib,2),max(box2_(1,:)));
+max_y = max(size(Ib,1),max(box2_(2,:)));
+% We now create the panoramic image by sampling the image Ib and
+% Ia at the corresponding points. Note that the inverse transformation
+% is used for Ia.
+ur = min_x:max_x;
+vr = min_y:max_y;
+[u,v] = meshgrid(ur,vr);
+Ib_ = vl_imwbackward(im2double(Ib),u,v);
+p_inverse = -p;
+u_ = u + p_inverse(1);
+v_ = v + p_inverse(2);
+Ia_ = vl_imwbackward(im2double(Ia),u_,v_);
+mass = ~isnan(Ib_) + ~isnan(Ia_);
+Ib_(isnan(Ib_)) = 0;
+Ia_(isnan(Ia_)) = 0;
+panoramic = (Ib_ + Ia_) ./ mass;
+imshow(panoramic,[]);
+end
