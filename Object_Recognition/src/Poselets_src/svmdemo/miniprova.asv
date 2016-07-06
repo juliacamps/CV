@@ -1,0 +1,88 @@
+
+
+%% FIRST WE LOAD THE DATASET
+
+load('mnist_all.mat');
+%imshow(reshape(train7(5,:), 28, 28)');
+%imshow(reshape(train0(5,:), 28, 28)');
+%imshow(reshape(test0(100,:), 28, 28)');
+
+%% TRAINING SVN WITH 100 RANDOM EXAMPLES PER CLASS AND A LINEAR KERNEL
+
+train={train0;train1;train2;train3;train4;train5;train6;train7;train8;train9};
+test={test0;test1;test2;test3;test4;test5;test6;test7;test8;test9};
+% We put all the train and test samples into a cell array to be able to pick
+% 100 of random values for training faster with a for
+
+T1=1;
+X=[];
+Y=[];
+Xtest=[];
+YtestReal=[];
+
+for i=0:1
+if i==T1    
+data=cell2mat(train(i+1,:));
+data=data(1:100,:);
+len=length(data(:,1));
+y=ones(1,len);
+else
+data=cell2mat(train(i+1,:));
+data=data(1:100,:);
+len=length(data(:,1));
+y=(ones(1,len)).*(-1);
+end
+
+X=[X double(data)'];
+Y=[Y y];
+
+end
+
+
+%% TRAINING of the SVN
+
+ C=[0.01;0.1;1;2;4];    % We will train if for differen C values to see the difference
+                        % and to pick the best one
+
+ K = X'*X;              % Because we are using a linear model
+
+ model = svm(K,Y,C(2))  % We train our classifier
+ 
+ 
+ %% TESTING of the SVN
+
+% Reading all the test and putting them in the same test matrix
+TEST=[];  
+labels=[];
+YtestReal=[];
+for i=0:1   
+datat=cell2mat(test(i+1,:));
+datat=datat(1:100,:);
+leng=length(datat(:,1));
+TEST=[TEST;datat];
+for j=1:leng
+labels=[labels i];  % Storing the labels of each number   
+if j-1==T1
+    YtestReal=[YtestReal 1];
+else
+    YtestReal=[YtestReal -1];
+end
+end
+end
+
+Xtest=double(TEST');
+
+
+%F=Xtest'*Xtest*Y*model.alpha+model.b
+
+   Ktest = X(:,model.svind)' * Xtest; 
+  
+   ftest = model.alphay(model.svind)' * Ktest + model.b; 
+   
+   Ytest=sign(ftest);
+   
+   confusionmat(YtestReal,Ytest)
+   
+
+    
+    
